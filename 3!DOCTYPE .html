@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            text-align: center; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #1a1a1a; 
+            color: white; 
+            margin: 0; 
+            padding: 20px 0; 
+        }
+        canvas { 
+            background: #87CEEB; 
+            display: block; 
+            margin: 10px auto; 
+            border-radius: 16px; 
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4); 
+        }
+        button { 
+            padding: 16px 45px; 
+            font-size: 20px; 
+            border-radius: 12px; 
+            border: none; 
+            background: #ff4757; 
+            color: white; 
+            font-weight: bold; 
+            cursor: pointer; 
+            box-shadow: 0 4px 10px rgba(255, 71, 87, 0.4); 
+            user-select: none; 
+            touch-action: manipulation;
+        }
+        button:active { 
+            background: #ff6b81; 
+            transform: scale(0.98); 
+        }
+    </style>
+</head>
+<body>
+    <h2>Plane Lift Prototype</h2>
+    <canvas id="gameCanvas" width="360" height="500"></canvas>
+    <button id="tapBtn">TAP FOR SPEED</button>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const planeX = 100;
+        let planeY = 250;
+        let speed = 0;
+        let isCrashed = false;
+
+        const gravity = 3.2;
+        const liftFactor = 0.28;
+        const tapBoost = 10;
+        const decay = 0.4;
+        const groundY = 440;
+
+        // Clouds
+        const clouds = [
+            { x: 50, y: 60, scale: 0.8 },
+            { x: 260, y: 100, scale: 1.1 }
+        ];
+
+        // Obstacle Trees
+        let trees = [
+            { x: 400, height: 110, width: 45 },
+            { x: 620, height: 160, width: 50 },
+            { x: 850, height: 80, width: 40 }
+        ];
+
+        function resetGame() {
+            planeY = 250;
+            speed = 0;
+            isCrashed = false;
+            trees = [
+                { x: 400, height: 110, width: 45 },
+                { x: 620, height: 160, width: 50 },
+                { x: 850, height: 80, width: 40 }
+            ];
+        }
+
+        document.getElementById('tapBtn').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            if (isCrashed) {
+                resetGame();
+                return;
+            }
+            speed = Math.min(speed + tapBoost, 80);
+        });
+
+        function drawCloud(x, y, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+            ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, Math.PI * 2);
+            ctx.arc(18, -10, 16, 0, Math.PI * 2);
+            ctx.arc(35, 0, 18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawTree(tree) {
+            const trunkWidth = 14;
+            const trunkX = tree.x + (tree.width - trunkWidth) / 2;
+            const trunkY = groundY - tree.height;
+
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#1e272e";
+
+            // Brown Trunk
+            ctx.fillStyle = "#8d5524";
+            ctx.beginPath();
+            ctx.rect(trunkX, trunkY, trunkWidth, tree.height);
+            ctx.fill();
+            ctx.stroke();
+
+            // Green Foliage
+            ctx.fillStyle = "#2ed573";
+            const foliageY = trunkY - 10;
+            ctx.beginPath();
+            ctx.arc(tree.x + tree.width / 2, foliageY, tree.width / 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function drawRedWhitePlane(x, y, tiltAngle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(tiltAngle);
+
+            ctx.lineWidth = 3.5;
+            ctx.strokeStyle = "#1e272e";
+            ctx.lineJoin = "round";
+
+            // 1. Red Tail Fin
+            ctx.fillStyle = "#ff3838";
+            ctx.beginPath();
+            ctx.moveTo(-22, -4);
+            ctx.quadraticCurveTo(-30, -32, -38, -32);
+            ctx.quadraticCurveTo(-45, -28, -34, -2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // 2. White Horizontal Tail Wing
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.ellipse(-24, -2, 10, 4, -0.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // 3. Main Fuselage Upper (White Half)
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.moveTo(-32, 0);
+            ctx.quadraticCurveTo(-25, -24, 10, -22);
+            ctx.quadraticCurveTo(32, -18, 38, -2);
+            ctx.quadraticCurveTo(20, 0, -32, 0);
+            ctx.fill();
+
+            // 4. Main Fuselage Lower (Red Half)
+            ctx.fillStyle = "#ff3838";
+            ctx.beginPath();
+            ctx.moveTo(-32, 0);
+            ctx.quadraticCurveTo(20, 0, 38, -2);
+            ctx.quadraticCurveTo(26, 16, -10, 16);
+            ctx.quadraticCurveTo(-26, 14, -32, 0);
+            ctx.fill();
+
+            // Fuselage Full Outer Line
+            ctx.beginPath();
+            ctx.moveTo(-32, 0);
+            ctx.quadraticCurveTo(-25, -24, 10, -22);
+            ctx.quadraticCurveTo(32, -18, 38, -2);
+            ctx.quadraticCurveTo(26, 16, -10, 16);
+            ctx.quadraticCurveTo(-26, 14, -32, 0);
+            ctx.closePath();
+            ctx.stroke();
+
+            // 5. Cockpit Window (Front Cyan)
+            ctx.fillStyle = "#7ed6df";
+            ctx.beginPath();
+            ctx.moveTo(12, -16);
+            ctx.quadraticCurveTo(26, -15, 30, -5);
+            ctx.lineTo(16, -5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // 6. Passenger Windows
+            ctx.fillStyle = "#7ed6df";
+            for (let i = 0; i < 4; i++) {
+                let wx = -12 + (i * 7);
+                ctx.beginPath();
+                ctx.roundRect(wx, -12, 5, 7, 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            // 7. Dark Engine Turbine (Under Wing)
+            ctx.fillStyle = "#485460";
+            ctx.beginPath();
+            ctx.ellipse(-4, 13, 8, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // 8. White Main Wing
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.ellipse(-2, 8, 16, 6, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawCrashIcon(x, y) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            // Explosion Starburst Icon
+            ctx.fillStyle = "#fffa65";
+            ctx.strokeStyle = "#ff3838";
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            const points = 10;
+            for (let i = 0; i < points * 2; i++) {
+                let r = (i % 2 === 0) ? 35 : 18;
+                let a = (i * Math.PI) / points;
+                let px = Math.cos(a) * r;
+                let py = Math.sin(a) * r;
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // CRASH Text
+            ctx.fillStyle = "#ff3838";
+            ctx.font = "900 24px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 4;
+            ctx.strokeText("CRASH!", 0, 0);
+            ctx.fillText("CRASH!", 0, 0);
+
+            // Retry Subtext
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "600 14px sans-serif";
+            ctx.fillText("Tap button to retry", 0, 50);
+
+            ctx.restore();
+        }
+
+        function checkCollision() {
+            // Ground Collision
+            if (planeY >= groundY - 15) return true;
+
+            // Tree Collisions
+            for (let tree of trees) {
+                let treeLeft = tree.x;
+                let treeRight = tree.x + tree.width;
+                let treeTop = groundY - tree.height - 15; // Includes foliage bubble
+
+                if (planeX + 25 > treeLeft && planeX - 25 < treeRight && planeY + 12 > treeTop) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function loop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!isCrashed) {
+                // Physics Update
+                speed = Math.max(0, speed - decay);
+                let lift = speed * liftFactor;
+                let verticalVelocity = -(lift - gravity);
+                planeY += verticalVelocity;
+
+                // Move Trees & Clouds
+                let scrollSpeed = 2 + (speed * 0.05);
+
+                clouds.forEach(cloud => {
+                    cloud.x -= scrollSpeed * 0.4;
+                    if (cloud.x < -60) cloud.x = canvas.width + 40;
+                });
+
+                trees.forEach(tree => {
+                    tree.x -= scrollSpeed;
+                    if (tree.x < -60) {
+                        tree.x = canvas.width + Math.random() * 80 + 40;
+                        tree.height = Math.floor(Math.random() * 100) + 70;
+                    }
+                });
+
+                // Check Collisions
+                if (checkCollision()) {
+                    isCrashed = true;
+                }
+            }
+
+            // Draw Clouds
+            clouds.forEach(cloud => drawCloud(cloud.x, cloud.y, cloud.scale));
+
+            // Draw Ground
+            ctx.fillStyle = "#2ed573";
+            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#1e272e";
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            ctx.lineTo(canvas.width, groundY);
+            ctx.stroke();
+
+            // Draw Obstacle Trees
+            trees.forEach(tree => drawTree(tree));
+
+            // Draw Plane / Crash
+            let tiltAngle = isCrashed ? 0.3 : Math.max(Math.min((-(speed * liftFactor - gravity)) * 0.04, 0.35), -0.35);
+            drawRedWhitePlane(planeX, planeY, tiltAngle);
+
+            if (isCrashed) {
+                drawCrashIcon(planeX + 10, planeY - 10);
+            }
+
+            // Speed Bar
+            ctx.fillStyle = "rgba(0,0,0,0.25)";
+            ctx.beginPath();
+            ctx.roundRect(15, 15, 120, 16, 8);
+            ctx.fill();
+
+            ctx.fillStyle = "#4cd137";
+            ctx.beginPath();
+            ctx.roundRect(15, 15, Math.min(speed * 1.5, 120), 16, 8);
+            ctx.fill();
+
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+</body>
+</html>
